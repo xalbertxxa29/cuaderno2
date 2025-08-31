@@ -111,30 +111,34 @@
   <script src="firebase-config.js"></script>
   <script src="auth.js"></script>
   <script>
-    // Registrar el Service Worker
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').then(registration => {
-          console.log('SW registrado: ', registration);
-        }).catch(registrationError => {
-          console.log('SW registro fallido: ', registrationError);
-        });
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(async (reg) => {
+    // 1) Forzar verificación de actualización en cada carga
+    try { await reg.update(); } catch(e) {}
+
+    // 2) Si hay uno nuevo esperando, actívalo ya
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+
+    // 3) Si aparece uno nuevo, cuando termine de instalar, actívalo
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      if (!nw) return;
+      nw.addEventListener('statechange', () => {
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+          nw.postMessage({ type: 'SKIP_WAITING' });
+        }
       });
-    }
-    // Lógica de pestañas
-    function openTab(evt, tabName) {
-      let i, tabcontent, tablinks;
-      tabcontent = document.getElementsByClassName("tab-content");
-      for (i = 0; i < tabcontent.length; i++) {
-        tabcontent[i].style.display = "none";
-      }
-      tablinks = document.getElementsByClassName("tab-link");
-      for (i = 0; i < tablinks.length; i++) {
-        tablinks[i].className = tablinks[i].className.replace(" active", "");
-      }
-      document.getElementById(tabName).style.display = "block";
-      evt.currentTarget.className += " active";
-    }
-  </script>
+    });
+  }).catch(console.error);
+
+  // 4) Cuando el controlador cambie (nuevo SW activo), recarga 1 vez
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+}
+</script>
 </body>
 </html>
