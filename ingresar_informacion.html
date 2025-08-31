@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingresar Información</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+</head>
+<body>
+    <div class="form-container">
+        <a href="menu.html" class="btn-back"><i class="fas fa-arrow-left"></i> Atrás</a>
+        <h1>Ingresar Información</h1>
+        <form id="info-form">
+            <div class="input-group">
+                <label for="comentario">Ingresar Comentario</label>
+                <textarea id="comentario" required></textarea>
+            </div>
+            <div class="input-group">
+                <label for="foto-input" class="btn-secondary">Tomar Fotografía (Opcional)</label>
+                <input type="file" id="foto-input" accept="image/*" capture="camera">
+                <img id="foto-preview" src="" alt="Vista previa de la foto" hidden>
+            </div>
+            <div class="input-group">
+                <label for="firma-canvas">Firma</label>
+                <canvas id="firma-canvas"></canvas>
+                <button type="button" id="clear-firma">Limpiar Firma</button>
+            </div>
+            <div class="button-group">
+                <button type="submit" id="guardar-btn">Guardar</button>
+            </div>
+        </form>
+    </div>
+    <div id="loadingOverlay" hidden><div class="spinner"></div></div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="ingresar_informacion.js"></script>
+</body>
+</html>
