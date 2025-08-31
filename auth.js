@@ -6,6 +6,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const auth = firebase.auth();
   const db = firebase.firestore();
 
+  // --- Redirección si ya hay sesión iniciada ---
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      // Usuario ya autenticado: entrar directo al Menú
+      window.location.replace("menu.html");
+    }
+  });
+
   // --- ELEMENTOS DEL DOM ---
   const loadingOverlay = document.getElementById("loadingOverlay");
   // Formulario de Login
