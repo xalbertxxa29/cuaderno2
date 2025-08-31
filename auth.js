@@ -8,11 +8,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- Redirección si ya hay sesión iniciada ---
   auth.onAuthStateChanged(user => {
-    if (user) {
-      // Usuario ya autenticado: entrar directo al Menú
-      window.location.replace("menu.html");
-    }
-  });
+  console.log('onAuthStateChanged →', !!user, user?.uid || null); // debería ser true tras relanzar si persiste
+  if (user) window.location.replace("menu.html");
+});
+
+// probar persistencia de storage
+try {
+  const k = 'prueba_persistencia';
+  if (!localStorage.getItem(k)) localStorage.setItem(k, 'ok-' + Date.now());
+  console.log('localStorage keys:', Object.keys(localStorage));
+} catch (e) { console.log('localStorage error', e); }
+
 
   // --- ELEMENTOS DEL DOM ---
   const loadingOverlay = document.getElementById("loadingOverlay");
