@@ -1,32 +1,27 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ver Consignas</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ver Consignas</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
 </head>
 <body>
-    <div class="list-page-container">
+  <div class="list-page-container">
+    <header class="list-page-header">
+      <h1 class="page-title">Consignas Activas</h1>
+      <a href="menu.html" class="btn-back"><i class="fas fa-arrow-left"></i><span>Menú</span></a>
+    </header>
+    <div id="consignas-container"></div>
+  </div>
 
-        <header class="list-page-header">
-            <h1 class="page-title">Consignas Activas</h1>
-            <a href="menu.html" class="btn-back">
-                <i class="fas fa-arrow-left"></i>
-                <span>Menú</span>
-            </a>
-        </header>
-        
-        <div id="consignas-container">
-            </div>
-        <div id="loadingOverlay" hidden><div class="spinner"></div></div>
-    </div>
-
-    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
-    <script src="firebase-config.js"></script>
-    <script src="ver_consignas.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js?v=34"></script>
+  <script src="initFirebase.js?v=34"></script>
+  <script src="ui.js?v=34"></script>
+  <script src="ver_consignas.js?v=34"></script>
 </body>
 </html>

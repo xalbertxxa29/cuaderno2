@@ -851,3 +851,95 @@ input[type="file"] {
 .lightbox-close { position: absolute; top: -14px; right: -14px; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 22px; line-height: 36px; text-align: center; cursor: pointer; background: #e70909; color: #fff; }
 
 img.thumb { max-width: 220px; max-height: 220px; border-radius: 8px; border: 1px solid #ccc; margin-top: 10px; cursor: zoom-in; display: block; }
+
+/* Overlay moderno */
+#loadingOverlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
+}
+#loadingOverlay[hidden] { display: none; }
+
+.loading-box {
+  width: min(540px, 92vw);
+  background: #121826;
+  color: #e6e6e6;
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  text-align: center;
+}
+.loading-brand {
+  width: 64px; height: 64px; margin: 0 auto 12px;
+  position: relative;
+}
+.loading-brand img { width: 64px; height: 64px; border-radius: 50%; }
+.loading-ring, .loading-ring::before, .loading-ring::after {
+  content: ""; position: absolute; inset: -6px;
+  border-radius: 50%; border: 3px solid transparent;
+  border-top-color: #e70909; animation: spin 1.2s linear infinite;
+}
+.loading-ring::before { inset: -14px; border-top-color: #3fb950; animation-duration: 1.6s;}
+.loading-ring::after  { inset:  2px;  border-top-color: #2f81f7; animation-duration: 1s; }
+
+.loading-title { font-size: 1.1rem; margin: 6px 0 10px; }
+.loading-sub   { font-size: .95rem; color: #a3a3a3; }
+
+.progress-wrap { height: 8px; background: #2a2f3a; border-radius: 999px; overflow: hidden; margin-top: 12px;}
+.progress-bar  { height: 100%; width: 38%; background: linear-gradient(90deg,#2f81f7,#3fb950); animation: widen 2.2s ease-in-out infinite alternate; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes widen { from { width: 25%; } to { width: 86%; } }
+
+.list-card {
+  background:#fff; color:#222; border-radius:14px;
+  padding:14px 16px; margin:14px 0; box-shadow:0 10px 30px rgba(0,0,0,.15);
+}
+.list-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.badge {
+  display:inline-block; font-size:.75rem; font-weight:700; letter-spacing:.3px;
+  padding:4px 8px; border-radius:999px; background:#e5e7eb; color:#111827;
+}
+.badge-green { background:#dcfce7; color:#065f46; }
+.badge-blue  { background:#dbeafe; color:#1e3a8a; }
+.badge-purple{ background:#ede9fe; color:#5b21b6; }
+.badge-gray  { background:#e5e7eb; color:#374151; }
+.muted { color:#6b7280; font-size:.85rem; }
+.thumb-wrap { margin-top:8px; }
+.thumb-wrap img { max-width:100%; border-radius:10px; display:block; }
+/* Estilos para las imágenes de los registros */
+.registro-imagen {
+    max-width: 100%; /* La imagen no excederá el ancho de su contenedor */
+    height: auto;    /* Mantiene la proporción de la imagen */
+    display: block;  /* Elimina el espacio extra debajo de la imagen (comportamiento inline) */
+    margin: 10px auto; /* Centra la imagen y le da un poco de margen */
+    border-radius: 8px; /* Opcional: bordes ligeramente redondeados */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Opcional: una pequeña sombra */
+}
+
+/* Opcional: Si quieres un tamaño máximo aún más estricto, puedes agregar */
+.registro-imagen {
+    max-width: 100%;
+    max-height: 300px; /* Limita la altura máxima de la imagen a 300px */
+    object-fit: contain; /* Asegura que la imagen se vea completa dentro de los límites */
+}
+
+/* También puedes aplicar estilos al contenedor de cada registro si lo deseas, para mejorar el espaciado */
+.registro-item { /* Asumiendo que cada registro tiene esta clase o similar */
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.registro-imagen {
+  display: block;
+  width: 20%;             /* La imagen ocupa todo el ancho de la tarjeta */
+  max-height: 100px;       /* ¡CLAVE! Limita la altura máxima a 350px */
+  object-fit: cover;       /* La imagen cubre el espacio, recortándose si es necesario para mantener la proporción */
+  object-position: center; /* Centra la imagen dentro de su marco */
+  border-radius: 8px;
+  margin: 12px 0;          /* Añade un espacio vertical */
+  cursor: zoom-in;         /* El cursor indica que se puede ampliar */
+}

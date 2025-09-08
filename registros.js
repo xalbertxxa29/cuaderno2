@@ -1,193 +1,223 @@
-document.addEventListener("DOMContentLoaded", () => {
-    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+// registros.js — Lista del CUADERNO.
+// Muestra foto si existe y **NO** muestra la firma. Incluye paginación y lightbox.
+document.addEventListener('DOMContentLoaded', () => {
+  // ---------- Firebase ----------
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
 
-    // Elementos del DOM
-    const registrosContainer = document.getElementById("registros-container");
-    const loadingOverlay = document.getElementById("loadingOverlay");
-    const fechaFiltroInput = document.getElementById("fecha-filtro");
-    const buscarBtn = document.getElementById("buscar-btn");
-    const limpiarBtn = document.getElementById("limpiar-btn");
-    const nextBtn = document.getElementById("next-btn");
-    const prevBtn = document.getElementById("prev-btn");
+  // ---------- UI wrapper seguro ----------
+  const UX = {
+    show: (msg) => (window.UI && UI.showOverlay) ? UI.showOverlay(msg) : void 0,
+    hide: () => (window.UI && UI.hideOverlay) ? UI.hideOverlay() : void 0,
+    alert: (title, msg) => (window.UI && UI.alert) ? UI.alert(title, msg) : alert((title ? title + '\n\n' : '') + (msg || '')),
+  };
 
-    // Estado de paginación
-    let firstVisible = null;
-    let lastVisible = null;
-    let currentUserData = null;
-    const PAGE_SIZE = 10;
-    
-    // Almacenamos los primeros documentos de cada página para el botón "Anterior"
-    let pageStack = []; 
+  // ---------- DOM ----------
+  const cont         = document.getElementById('registros-container');
+  const fechaInput   = document.getElementById('fecha-filtro');
+  const btnBuscar    = document.getElementById('buscar-btn');
+  const btnLimpiar   = document.getElementById('limpiar-btn');
+  const prevBtn      = document.getElementById('prev-btn');
+  const nextBtn      = document.getElementById('next-btn');
 
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            const userId = user.email.split('@')[0];
-            const userDoc = await db.collection('USUARIOS').doc(userId).get();
-            if (userDoc.exists) {
-                currentUserData = userDoc.data();
-                if (!currentUserData.CLIENTE || !currentUserData.UNIDAD) {
-                     registrosContainer.innerHTML = "<p style='color:white;'>Error: Faltan datos de CLIENTE o UNIDAD en el perfil del usuario.</p>";
-                     return;
-                }
-                cargarRegistros(); // Carga inicial
-            } else {
-                registrosContainer.innerHTML = "<p>Error: Perfil de usuario no encontrado.</p>";
-            }
-        } else {
-            window.location.href = 'index.html';
-        }
-    });
+  // Lightbox
+  const lightbox       = document.getElementById('imageLightbox');
+  const lightboxImg    = document.getElementById('lightboxImg');
+  const lightboxClose  = document.querySelector('.lightbox-close');
+  const lightboxBack   = document.querySelector('.lightbox-backdrop');
 
-    const cargarRegistros = async (direction = 'inicio') => {
-        if (!currentUserData) return;
-        loadingOverlay.hidden = false;
+  // ---------- Estado ----------
+  const PAGE_SIZE = 10;
+  let perfil = null;            // { CLIENTE, UNIDAD }
+  let lastDoc = null;           // cursor para "siguiente"
+  let pageStack = [];           // pila de primeros docs por página para retroceder
 
-        try {
-            const { CLIENTE, UNIDAD } = currentUserData;
-            let query = db.collection('CUADERNO')
-                .where('cliente', '==', CLIENTE)
-                .where('unidad', '==', UNIDAD)
-                .orderBy('timestamp', 'desc');
-
-            const fecha = fechaFiltroInput.value;
-            if (fecha) {
-                const startDate = new Date(fecha + 'T00:00:00');
-                const endDate = new Date(fecha + 'T23:59:59');
-                query = query.where('timestamp', '>=', startDate).where('timestamp', '<=', endDate);
-            }
-
-            if (direction === 'next' && lastVisible) {
-                pageStack.push(firstVisible); // Guardar el inicio de la página actual
-                query = query.startAfter(lastVisible);
-            } else if (direction === 'prev') {
-                const lastFirst = pageStack.pop(); // Obtener el inicio de la página anterior
-                query = query.startAt(lastFirst);
-            }
-            
-            const snapshot = await query.limit(PAGE_SIZE).get();
-            
-            registrosContainer.innerHTML = '';
-
-            if (snapshot.empty) {
-                registrosContainer.innerHTML = '<p style="color:white; text-align:center;">No se encontraron registros.</p>';
-                nextBtn.disabled = true;
-                prevBtn.disabled = pageStack.length === 0;
-                return;
-            }
-
-            firstVisible = snapshot.docs[0];
-            lastVisible = snapshot.docs[snapshot.docs.length - 1];
-
-            snapshot.forEach(doc => {
-                registrosContainer.innerHTML += renderRegistroCard(doc.data());
-            });
-
-            const checkNextSnapshot = await query.startAfter(lastVisible).limit(1).get();
-            nextBtn.disabled = checkNextSnapshot.empty;
-            prevBtn.disabled = pageStack.length === 0;
-
-        } catch (error) {
-            console.error("Error detallado al cargar registros: ", error); // Log más detallado
-            registrosContainer.innerHTML = '<p style="color:red; text-align:center;">Error al cargar los datos. Revisa la consola (F12) para más detalles.</p>';
-        } finally {
-            loadingOverlay.hidden = true;
-        }
-    };
-
-    const renderRegistroCard = (data) => {
-        const fecha = data.timestamp ? data.timestamp.toDate().toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'N/A';
-        if (data.tipoRegistro === 'RELEVO') {
-            return `
-                <div class="registro-card" style="border-left: 5px solid #ff9800;">
-                    <p><strong>Fecha:</strong> ${fecha}</p>
-                    <p><strong>Tipo de Registro:</strong> RELEVO DE TURNO</p>
-                    <p><strong>Turno Entregado por:</strong> ${data.usuarioSaliente.nombre}</p>
-                    <p><strong>Turno Recibido por:</strong> ${data.usuarioEntrante.nombre}</p>
-                    <p><strong>Comentario:</strong><br>${data.comentario}</p>
-                    <p><strong>Firma de Conformidad:</strong></p>
-                    <img src="${data.firma}" alt="Firma de relevo" style="max-width: 300px; border-radius: 0.5rem; margin-top: 0.5rem; border: 1px solid #ccc;">
-                </div>
-            `;
-        }
-        
-        
-        let fotoHTML = '';
-        if (data.fotoURL) {
-            const urlOriginal = data.fotoURL;
-            try {
-                const extensionIndex = urlOriginal.lastIndexOf('.');
-                const insertIndex = urlOriginal.indexOf('?');
-                if (extensionIndex > 0 && insertIndex > extensionIndex) {
-                    const base = urlOriginal.substring(0, extensionIndex);
-                    const extension = urlOriginal.substring(extensionIndex, insertIndex);
-                    const token = urlOriginal.substring(insertIndex);
-                    const urlMiniatura = `${base}_400x400${extension}${token}`;
-                    fotoHTML = `<img class="thumb" src="${urlMiniatura}" data-full="${urlOriginal}" alt="Foto de registro">`;
-                } else {
-                    throw new Error("Formato de URL no esperado.");
-                }
-            } catch (e) {
-                fotoHTML = `<img class="thumb" src="${urlOriginal}" data-full="${urlOriginal}" alt="Foto de registro">`;
-            }
-        }
-
-        const nombreCompleto = `${data.nombres || ''} ${data.apellidos || ''}`.trim();
-        return `
-            <div class="registro-card">
-                <p><strong>Fecha:</strong> ${fecha}</p>
-                <p><strong>Registrado por:</strong> ${nombreCompleto}</p>
-                <p><strong>Comentario:</strong><br>${data.comentario}</p>
-                ${fotoHTML}
-            </div>
-        `;
-    };
-
-    const resetAndLoad = () => {
-        pageStack = [];
-        firstVisible = null;
-        lastVisible = null;
-        cargarRegistros('inicio');
-    };
-    
-    buscarBtn.addEventListener('click', resetAndLoad);
-    limpiarBtn.addEventListener('click', () => {
-        fechaFiltroInput.value = '';
-        resetAndLoad();
-    });
-    nextBtn.addEventListener('click', () => cargarRegistros('next'));
-    prevBtn.addEventListener('click', () => cargarRegistros('prev'));
-});
-
-// --- Lightbox handlers ---
-document.addEventListener('click', (e) => {
-    const img = e.target.closest('img.thumb');
-    if (img) {
-        const full = img.getAttribute('data-full') || img.src;
-        const lb = document.getElementById('imageLightbox');
-        const lbImg = document.getElementById('lightboxImg');
-        lbImg.src = full;
-        lb.removeAttribute('hidden');
+  // ---------- Sesión ----------
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) { window.location.href = 'index.html'; return; }
+    try {
+      const userId = user.email.split('@')[0];
+      const d = await db.collection('USUARIOS').doc(userId).get();
+      if (!d.exists) throw new Error('No se encontró tu perfil.');
+      const { CLIENTE, UNIDAD } = d.data();
+      perfil = { CLIENTE, UNIDAD };
+      await cargarRegistros(); // primera página
+    } catch (e) {
+      console.error(e);
+      UX.alert('Error', e.message || 'No se pudo cargar tu perfil.');
     }
-});
+  });
 
-document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('lightbox-close') || e.target.classList.contains('lightbox-backdrop')) {
-        const lb = document.getElementById('imageLightbox');
-        const lbImg = document.getElementById('lightboxImg');
-        lbImg.removeAttribute('src');
-        lb.setAttribute('hidden', '');
-    }
-});
+  // ---------- Utilidades ----------
+  const toDateTimeText = (ts) => {
+    try {
+      const date = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      return date ? date.toLocaleString() : '';
+    } catch { return ''; }
+  };
 
-// Fallback: si la miniatura falla, usar la original
-document.addEventListener('error', (e) => {
-    const t = e.target;
-    if (t && t.tagName === 'IMG' && t.classList.contains('thumb')) {
-        const full = t.getAttribute('data-full');
-        if (full && t.src !== full) {
-            t.src = full;
-        }
+  const startEndOfDay = (yyyy_mm_dd) => {
+    const start = new Date(`${yyyy_mm_dd}T00:00:00`);
+    const end   = new Date(`${yyyy_mm_dd}T23:59:59.999`);
+    return [start, end];
+  };
+
+  function buildQuery(direction, cursor) {
+    const { CLIENTE, UNIDAD } = perfil;
+    let ref;
+
+    if (fechaInput.value) {
+      const [start, end] = startEndOfDay(fechaInput.value);
+      ref = db.collection('CUADERNO')
+        .where('cliente', '==', CLIENTE)
+        .where('unidad',  '==', UNIDAD)
+        .where('timestamp', '>=', start)
+        .where('timestamp', '<=', end)
+        .orderBy('timestamp', 'desc')
+        .limit(PAGE_SIZE);
+    } else {
+      ref = db.collection('CUADERNO')
+        .where('cliente', '==', CLIENTE)
+        .where('unidad',  '==', UNIDAD)
+        .orderBy('timestamp', 'desc')
+        .limit(PAGE_SIZE);
     }
-}, true);
+
+    if (direction === 'next' && cursor) ref = ref.startAfter(cursor);
+    if (direction === 'prev' && cursor) ref = ref.endBefore(cursor).limitToLast(PAGE_SIZE);
+    return ref;
+  }
+
+  function resolveRegistradoPor(d) {
+    // Intentamos varias claves según distintos formatos guardados
+    if (d.usuario) return d.usuario; // nuestro campo estándar en CUADERNO
+    if (d.registradoPor?.nombre) return d.registradoPor.nombre;
+    if (d.REGISTRADO_POR || d.registrado_por) return d.REGISTRADO_POR || d.registrado_por;
+    if (d.nombres || d.apellidos) return `${d.nombres || ''} ${d.apellidos || ''}`.trim();
+    if (d.userId) return d.userId;
+    return '—';
+  }
+
+  function onlyPhotoHTML(data) {
+    const url = data.fotoURL || data.foto || null;
+    if (!url) return '';
+    // CORRECCIÓN: Se elimina el style="..." y se añade class="registro-imagen"
+    return `
+      <div class="thumb-wrap" style="margin-top:10px;">
+        <img src="${url}" class="registro-imagen" alt="Foto del registro" data-lightbox="true" loading="lazy">
+      </div>`;
+  }
+
+  function cardRegistroHTML(data) {
+    const fechaTxt = toDateTimeText(data.timestamp);
+    const quien    = resolveRegistradoPor(data);
+    const comentario = (data.comentario || '').replace(/\n/g, '<br>');
+    const fotoHTML = onlyPhotoHTML(data);
+    return `
+      <article class="list-card">
+        <div class="list-card-header">
+          <span class="badge badge-gray">REGISTRO</span>
+          <span class="muted">${fechaTxt}</span>
+        </div>
+        <div class="muted"><strong>Registrado por:</strong> ${quien}</div>
+        <div style="margin-top:6px;">${comentario}</div>
+        ${fotoHTML}
+      </article>`;
+  }
+
+  function cardRelevoHTML(data) {
+    const fechaTxt = toDateTimeText(data.timestamp);
+    const comentario = (data.comentario || '').replace(/\n/g, '<br>');
+    const sal = data.usuarioSaliente?.nombre || '';
+    const ent = data.usuarioEntrante?.nombre || '';
+    const quien = resolveRegistradoPor(data);
+    const fotoHTML = onlyPhotoHTML(data); // si hubiera foto en relevo
+    return `
+      <article class="list-card">
+        <div class="list-card-header">
+          <span class="badge badge-purple">RELEVO</span>
+          <span class="muted">${fechaTxt}</span>
+        </div>
+        <div class="muted"><strong>Saliente:</strong> ${sal} &nbsp; <strong>Entrante:</strong> ${ent}</div>
+        <div class="muted"><strong>Registrado por:</strong> ${quien}</div>
+        <div style="margin-top:6px;">${comentario}</div>
+        ${fotoHTML}
+      </article>`;
+  }
+
+  function render(docs) {
+    if (!docs.length) {
+      cont.innerHTML = `<p class="muted">Sin registros.</p>`;
+      return;
+    }
+    const html = docs.map(d => {
+      const data = d.data();
+      return (data.tipoRegistro === 'RELEVO') ? cardRelevoHTML(data) : cardRegistroHTML(data);
+    }).join('');
+    cont.innerHTML = html;
+  }
+
+  // ---------- Carga / paginación ----------
+  async function cargarRegistros(direction) {
+    if (!perfil) return;
+    UX.show('Cargando registros…');
+
+    try {
+      let cursor = null;
+      if (direction === 'next') cursor = lastDoc;
+      if (direction === 'prev') {
+        if (pageStack.length > 1) {
+          pageStack.pop();
+          cursor = pageStack[pageStack.length - 1];
+        } else { UX.hide(); return; }
+      }
+
+      const snap = await buildQuery(direction, cursor).get();
+
+      if (snap.empty) {
+        render([]);
+        prevBtn.disabled = pageStack.length <= 1;
+        nextBtn.disabled = true;
+        UX.hide();
+        return;
+      }
+
+      const first = snap.docs[0];
+      const last  = snap.docs[snap.docs.length - 1];
+      lastDoc = last;
+      if (direction !== 'prev') pageStack.push(first);
+
+      render(snap.docs);
+
+      prevBtn.disabled = pageStack.length <= 1;
+      nextBtn.disabled = snap.docs.length < PAGE_SIZE;
+    } catch (e) {
+      console.error('Error cargando registros:', e);
+      cont.innerHTML = `<p class="muted">No se pudieron cargar los registros.</p>`;
+    } finally {
+      UX.hide();
+    }
+  }
+
+  // ---------- Eventos ----------
+  btnBuscar?.addEventListener('click', () => {
+    pageStack = []; lastDoc = null; cargarRegistros();
+  });
+  btnLimpiar?.addEventListener('click', () => {
+    fechaInput.value = ''; pageStack = []; lastDoc = null; cargarRegistros();
+  });
+  nextBtn?.addEventListener('click', () => cargarRegistros('next'));
+  prevBtn?.addEventListener('click', () => cargarRegistros('prev'));
+
+  // Lightbox
+  cont?.addEventListener('click', (e) => {
+    const img = e.target.closest('img[data-lightbox]');
+    if (!img || !lightbox || !lightboxImg) return;
+    lightboxImg.src = img.src;
+    lightbox.removeAttribute('hidden');
+  });
+  lightboxClose?.addEventListener('click', () => lightbox.setAttribute('hidden', ''));
+  lightboxBack?.addEventListener('click', () => lightbox.setAttribute('hidden', ''));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lightbox?.setAttribute('hidden', ''); });
+});

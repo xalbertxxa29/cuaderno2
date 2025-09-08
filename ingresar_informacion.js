@@ -1,180 +1,114 @@
-document.addEventListener("DOMContentLoaded", () => {
-    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-    const storage = firebase.storage();
+// ingresar_informacion.js (robusto si UI.js no está, y con firma/foto opcional)
+document.addEventListener('DOMContentLoaded', () => {
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+  const storage = firebase.storage();
 
-    const infoForm = document.getElementById("info-form");
-    const comentarioInput = document.getElementById("comentario");
-    const fotoInput = document.getElementById("foto-input");
-    const fotoPreview = document.getElementById("foto-preview");
-    const canvas = document.getElementById("firma-canvas");
-    const clearFirmaBtn = document.getElementById("clear-firma");
-    const loadingOverlay = document.getElementById("loadingOverlay");
+  // Wrapper de UI seguro
+  const UX = {
+    show: (m) => (window.UI && UI.showOverlay) ? UI.showOverlay(m) : void 0,
+    hide: () => (window.UI && UI.hideOverlay) ? UI.hideOverlay() : void 0,
+    alert: (t, m, cb) => (window.UI && UI.alert) ? UI.alert(t, m, cb) : (alert(`${t}\n\n${m||''}`), cb && cb())
+  };
 
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
-    let hasSigned = false;
-    let lastX = 0;
-    let lastY = 0;
+  // DOM
+  const form         = document.getElementById('info-form');
+  const comentarioEl = document.getElementById('comentario');
+  const fotoInput    = document.getElementById('foto-input');
+  const fotoPreview  = document.getElementById('foto-preview');
+  const canvas       = document.getElementById('firma-canvas');
+  const clearBtn     = document.getElementById('clear-firma');
 
-    // --- INICIO: FUNCIÓN DE FIRMA CORREGIDA ---
-    function resizeCanvas() {
-        // Calcula la relación de píxeles para pantallas de alta densidad (retina)
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        
-        // Ajusta el tamaño del canvas según su tamaño en CSS y el ratio de píxeles
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        
-        // Escala el contexto para que las coordenadas de dibujo coincidan
-        canvas.getContext('2d').scale(ratio, ratio);
-        
-        // Limpia el canvas después de redimensionar
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        console.log("Canvas recalibrado.");
+  // Firma
+  const sigPad = new SignaturePad(canvas, { backgroundColor: 'rgb(255,255,255)' });
+  function resizeCanvas() {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width  = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    sigPad.clear();
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+  clearBtn?.addEventListener('click', () => sigPad.clear());
+
+  // Foto
+  let pendingPhoto = null;
+  fotoInput?.addEventListener('change', async () => {
+    const file = fotoInput.files && fotoInput.files[0];
+    if (!file) { pendingPhoto = null; fotoPreview.hidden = true; fotoPreview.src=''; return; }
+    try {
+      UX.show('Procesando imagen…');
+      const opt = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/jpeg' };
+      const out = await imageCompression(file, opt);
+      pendingPhoto = out;
+      const url = URL.createObjectURL(out);
+      fotoPreview.src = url; fotoPreview.hidden = false;
+    } catch (e) {
+      console.error(e);
+      UX.alert('Aviso', 'No se pudo procesar la imagen.');
+      pendingPhoto = null; fotoPreview.hidden = true; fotoPreview.src='';
+    } finally { UX.hide(); }
+  });
+
+  function dataURLtoBlob(dataurl) {
+    const arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]); let n = bstr.length; const u8 = new Uint8Array(n);
+    while (n--) u8[n] = bstr.charCodeAt(n);
+    return new Blob([u8], { type: mime });
+  }
+  async function uploadTo(path, blob) {
+    const ref = storage.ref().child(path);
+    await ref.put(blob);
+    return await ref.getDownloadURL();
+  }
+
+  auth.onAuthStateChanged((user) => { if (!user) window.location.href='index.html'; });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const comentario = (comentarioEl.value || '').trim();
+    if (!comentario) { UX.alert('Aviso', 'Ingresa un comentario.'); return; }
+
+    UX.show('Guardando registro…');
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Sesión inválida.');
+      const userId = user.email.split('@')[0];
+
+      const prof = await db.collection('USUARIOS').doc(userId).get();
+      if (!prof.exists) throw new Error('No se encontró tu perfil.');
+      const { CLIENTE, UNIDAD, NOMBRES, APELLIDOS } = prof.data();
+
+      const stamp = Date.now();
+      let fotoURL = null;
+      if (pendingPhoto) {
+        fotoURL = await uploadTo(`cuaderno/${CLIENTE}/${UNIDAD}/${userId}_${stamp}_foto.jpg`, pendingPhoto);
+      }
+
+      let firmaURL = null; let firmaData = null;
+      if (!sigPad.isEmpty()) {
+        const dataURL = sigPad.toDataURL('image/png');
+        try { firmaURL = await uploadTo(`cuaderno/${CLIENTE}/${UNIDAD}/${userId}_${stamp}_firma.png`, dataURLtoBlob(dataURL)); }
+        catch { firmaData = dataURL; } // Fallback ligero
+      }
+
+      await db.collection('CUADERNO').add({
+        cliente: CLIENTE, unidad: UNIDAD,
+        usuario: `${(NOMBRES||'').trim()} ${(APELLIDOS||'').trim()}`.trim() || userId,
+        userId, comentario,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        ...(fotoURL ? { fotoURL } : {}),
+        ...(firmaURL ? { firmaURL } : (firmaData ? { firma: firmaData } : {})),
+      });
+
+      UX.hide();
+      UX.alert('Éxito', 'Registro guardado correctamente.', () => window.location.href='menu.html');
+    } catch (err) {
+      console.error(err);
+      UX.hide();
+      UX.alert('Error', err.message || 'No fue posible guardar el registro.');
     }
-    // --- FIN: FUNCIÓN DE FIRMA CORREGIDA ---
-
-    window.addEventListener('load', resizeCanvas);
-    window.addEventListener('resize', resizeCanvas);
-
-    function startDraw(e) {
-        drawing = true;
-        hasSigned = true;
-        [lastX, lastY] = [e.offsetX, e.offsetY];
-    }
-
-    function draw(e) {
-        if (!drawing) return;
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(e.offsetX, e.offsetY);
-        ctx.stroke();
-        [lastX, lastY] = [e.offsetX, e.offsetY];
-    }
-
-    function stopDraw() {
-        drawing = false;
-    }
-
-    canvas.addEventListener('mousedown', startDraw);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDraw);
-    canvas.addEventListener('mouseout', stopDraw);
-
-    canvas.addEventListener('touchstart', e => {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const rect = canvas.getBoundingClientRect();
-        const touchX = touch.clientX - rect.left;
-        const touchY = touch.clientY - rect.top;
-        startDraw({ offsetX: touchX, offsetY: touchY });
-    }, { passive: false });
-
-    canvas.addEventListener('touchmove', e => {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const rect = canvas.getBoundingClientRect();
-        const touchX = touch.clientX - rect.left;
-        const touchY = touch.clientY - rect.top;
-        draw({ offsetX: touchX, offsetY: touchY });
-    }, { passive: false });
-
-    canvas.addEventListener('touchend', e => {
-        e.preventDefault();
-        stopDraw();
-    });
-
-    clearFirmaBtn.addEventListener('click', () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        hasSigned = false;
-    });
-
-    fotoInput.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                fotoPreview.src = event.target.result;
-                fotoPreview.hidden = false;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-
-    infoForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        loadingOverlay.hidden = false;
-
-        const comentario = comentarioInput.value.trim();
-        const fotoFile = fotoInput.files[0];
-
-        if (!comentario || !hasSigned) {
-            loadingOverlay.hidden = true;
-            alert("Por favor, complete el comentario y la firma.");
-            return;
-        }
-
-        const user = auth.currentUser;
-        if (!user) {
-            loadingOverlay.hidden = true;
-            alert("Usuario no autenticado. Redirigiendo al login.");
-            window.location.href = "index.html";
-            return;
-        }
-
-        try {
-            const userId = user.email.split('@')[0];
-            const userDocRef = db.collection('USUARIOS').doc(userId);
-            const userDoc = await userDocRef.get();
-            const userData = userDoc.data();
-
-            let fotoURL = "";
-            if (fotoFile) {
-                console.log(`Tamaño original: ${(fotoFile.size / 1024 / 1024).toFixed(2)} MB`);
-                const options = {
-                    maxSizeMB: 1,
-                    maxWidthOrHeight: 1920,
-                    useWebWorker: true,
-                };
-                const compressedFile = await imageCompression(fotoFile, options);
-                console.log(`Tamaño comprimido: ${(compressedFile.size / 1024 / 1024).toFixed(2)} MB`);
-                
-                const fotoRef = storage.ref(`cuaderno/${userId}_${Date.now()}`);
-                const snapshot = await fotoRef.put(compressedFile);
-                fotoURL = await snapshot.ref.getDownloadURL();
-            }
-
-            const firmaDataURL = canvas.toDataURL('image/png');
-
-            await db.collection('CUADERNO').add({
-                userId: userId,
-                nombres: userData.NOMBRES,
-                apellidos: userData.APELLIDOS,
-                cliente: userData.CLIENTE,
-                unidad: userData.UNIDAD,
-                comentario: comentario,
-                fotoURL: fotoURL,
-                firma: firmaDataURL,
-                fecha: new Date(),
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-
-            alert("Información guardada correctamente.");
-            infoForm.reset();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            hasSigned = false;
-            fotoPreview.hidden = true;
-
-        } catch (error) {
-            console.error("Error al guardar la información: ", error);
-            alert("Error al guardar la información. Por favor, inténtelo de nuevo.");
-        } finally {
-            loadingOverlay.hidden = true;
-        }
-    });
+  });
 });
